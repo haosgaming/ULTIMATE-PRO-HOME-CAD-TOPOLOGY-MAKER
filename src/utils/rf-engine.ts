@@ -58,7 +58,7 @@ export interface RFDevice {
   roomName?: string;
 }
 
-export const WALL_ATTENUATION_DB: Record<WallSegment['material'], Record<string, number>> = {
+export const WALL_ATTENUATION_DB: Record<WallMaterial, Record<'433' | '868' | '2400' | '5000', number>> = {
   reinforced_concrete: {
     '433': 18,
     '868': 22,
@@ -109,6 +109,93 @@ export const WALL_ATTENUATION_DB: Record<WallSegment['material'], Record<string,
   },
 };
 
+export type MaterialAttenuationMap = Record<string, Record<string, number>>;
+
+export interface MaterialMetadata {
+  id: WallMaterial;
+  name: string;
+  category: 'masonry' | 'concrete' | 'drywall' | 'shield' | 'organic' | 'aperture';
+  description: string;
+  standardNorm: string;
+  badgeColor: string;
+  defaultThicknessCm: number;
+}
+
+export const MATERIAL_METADATA: Record<WallMaterial, MaterialMetadata> = {
+  stone: {
+    id: 'stone',
+    name: 'Kamenné / lomové zdivo',
+    category: 'masonry',
+    description: 'Masivní kamenné zdivo (žula, pískovec, opuka, křemen). Vysoká hustota a silný odraz i absorpce RF vln.',
+    standardNorm: 'ITU-R P.1238 / ČSN 73 0540',
+    badgeColor: '#78716c',
+    defaultThicknessCm: 50,
+  },
+  reinforced_concrete: {
+    id: 'reinforced_concrete',
+    name: 'Železobeton (nosné panely a monolit)',
+    category: 'concrete',
+    description: 'Hustě armovaný beton. Ocelová mříž výztuže působí jako částečná Faradayova klec pro mikrovlny.',
+    standardNorm: 'ITU-R P.1238-11 / NIST TN 1387',
+    badgeColor: '#64748b',
+    defaultThicknessCm: 25,
+  },
+  brick_30cm: {
+    id: 'brick_30cm',
+    name: 'Pálená cihla 30 cm (Porotherm / Heluz)',
+    category: 'masonry',
+    description: 'Keramické dutinové i plné bloky s maltovým ložem. Běžné obvodové a nosné zdivo.',
+    standardNorm: 'ITU-R P.1238 / COST 231',
+    badgeColor: '#ea580c',
+    defaultThicknessCm: 30,
+  },
+  brick_15cm: {
+    id: 'brick_15cm',
+    name: 'Pálená příčkovka 15 cm',
+    category: 'masonry',
+    description: 'Vnitřní nenosné dělící příčky z keramických tvárnic.',
+    standardNorm: 'ITU-R P.1238 / ČSN EN 771-1',
+    badgeColor: '#f97316',
+    defaultThicknessCm: 15,
+  },
+  plasterboard: {
+    id: 'plasterboard',
+    name: 'Sádrokarton (Rigips / Knauf)',
+    category: 'drywall',
+    description: 'Dvojitý sádrokartonový plášť na CW/UW profilech s minerální akustickou vatou.',
+    standardNorm: 'ITU-R P.1238 / IEEE 802.11ax Model',
+    badgeColor: '#38bdf8',
+    defaultThicknessCm: 10,
+  },
+  glass: {
+    id: 'glass',
+    name: 'Okenní sklo (standardní dvojsklo/trojsklo)',
+    category: 'aperture',
+    description: 'Čiré plavené dvojsklo bez selektivního kovového napaření (low-E vrstva zvyšuje útlum o dalších 15-25 dB).',
+    standardNorm: 'ITU-R P.2040 / ČSN EN 1279',
+    badgeColor: '#22d3ee',
+    defaultThicknessCm: 4,
+  },
+  metal_shield: {
+    id: 'metal_shield',
+    name: 'Kovové stínění / Plech / Faradayova klec',
+    category: 'shield',
+    description: 'Ocelový pozinkovaný plech, stínicí skříně rozvaděčů, sendvičové panely PUR s plechem.',
+    standardNorm: 'MIL-STD-285 / IEEE-299',
+    badgeColor: '#94a3b8',
+    defaultThicknessCm: 2,
+  },
+  wood: {
+    id: 'wood',
+    name: 'Dřevo / Trámové stropy / Dřevostavba',
+    category: 'organic',
+    description: 'Smrkové/borovicové masivní trámy, OSB desky, palubkové obklady, vysušené dřevo.',
+    standardNorm: 'ITU-R P.1238 / COST 231',
+    badgeColor: '#d97706',
+    defaultThicknessCm: 15,
+  },
+};
+
 /**
  * Line segment intersection check between (p1->p2) and (p3->p4)
  */
@@ -154,7 +241,8 @@ export function calculateSignalAtPoint(
   txDevice: RFDevice,
   targetPos: Position3D,
   walls: WallSegment[],
-  rxAntennaGainDbi = 0
+  rxAntennaGainDbi = 0,
+  customAttenuation?: MaterialAttenuationMap
 ): {
   distanceMeters: number;
   rssiDbm: number;
@@ -180,7 +268,10 @@ export function calculateSignalAtPoint(
   for (const wall of walls) {
     if (checkLineIntersection(pTx, pRx, wall.p1, wall.p2)) {
       intersectionsCount++;
-      const baseLoss = WALL_ATTENUATION_DB[wall.material]?.[freqBand] ?? 10;
+      const baseLoss =
+        customAttenuation?.[wall.material]?.[freqBand] ??
+        WALL_ATTENUATION_DB[wall.material]?.[freqBand] ??
+        10;
       // Adjust slightly by thickness if non-standard (normalised to 15cm)
       const thicknessFactor = Math.max(0.5, wall.thicknessCm / 15);
       wallLossDb += baseLoss * thicknessFactor;

@@ -1,5 +1,24 @@
-import { Position3D, WallSegment, WallMaterial, RFDevice, DevicePort } from '../utils/rf-engine.ts';
-export type { Position3D, WallSegment, WallMaterial, RFDevice, DevicePort };
+import {
+  Position3D,
+  WallSegment,
+  WallMaterial,
+  RFDevice,
+  DevicePort,
+  MaterialAttenuationMap,
+  MaterialMetadata,
+  MATERIAL_METADATA,
+  WALL_ATTENUATION_DB,
+} from '../utils/rf-engine.ts';
+export type {
+  Position3D,
+  WallSegment,
+  WallMaterial,
+  RFDevice,
+  DevicePort,
+  MaterialAttenuationMap,
+  MaterialMetadata,
+};
+export { MATERIAL_METADATA, WALL_ATTENUATION_DB };
 
 export type ConduitLayer = 'ethernet' | 'power' | 'water' | 'drainage' | 'rf_bus';
 
@@ -97,6 +116,7 @@ export interface TopologyProject {
   devices: RFDevice[];
   connections: NetworkConnection[];
   notes: string;
+  customAttenuation?: MaterialAttenuationMap;
   nasConfig: {
     truenasIp: string;
     dataset: string;

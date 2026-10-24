@@ -4,6 +4,9 @@ import {
   Room,
   InWallConduit,
   ConduitLayer,
+  WallMaterial,
+  WALL_ATTENUATION_DB,
+  MATERIAL_METADATA,
 } from '../types/topology.ts';
 import { WallSegment } from '../utils/rf-engine.ts';
 import {
@@ -91,7 +94,7 @@ export const FloorplanEditor: React.FC<FloorplanEditorProps> = ({
   const [isSnapEnabled, setIsSnapEnabled] = useState<boolean>(true);
 
   // Sidebar tab
-  const [sidebarTab, setSidebarTab] = useState<'rooms' | 'walls' | 'templates'>('rooms');
+  const [sidebarTab, setSidebarTab] = useState<'rooms' | 'walls' | 'templates' | 'materials'>('rooms');
 
   // Coordinate transforms
   const screenToWorld = useCallback(
@@ -978,7 +981,7 @@ export const FloorplanEditor: React.FC<FloorplanEditorProps> = ({
       {/* Right Architectural Panel: Inspector & Lists */}
       <aside className="w-84 bg-slate-950/95 border-l border-slate-800/80 flex flex-col p-3 overflow-hidden shrink-0 space-y-3 z-10">
         {/* Tab switcher */}
-        <div className="flex rounded-lg bg-slate-900 border border-slate-800 p-1 text-[11px]">
+        <div className="flex rounded-lg bg-slate-900 border border-slate-800 p-1 text-[10px]">
           <button
             onClick={() => setSidebarTab('rooms')}
             className={`flex-1 py-1 rounded text-center font-bold transition ${
@@ -994,6 +997,14 @@ export const FloorplanEditor: React.FC<FloorplanEditorProps> = ({
             }`}
           >
             Zdi ({project.walls.length})
+          </button>
+          <button
+            onClick={() => setSidebarTab('materials')}
+            className={`flex-1 py-1 rounded text-center font-bold transition ${
+              sidebarTab === 'materials' ? 'bg-cyan-500 text-slate-950' : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            Materiály
           </button>
           <button
             onClick={() => setSidebarTab('templates')}
@@ -1151,6 +1162,45 @@ export const FloorplanEditor: React.FC<FloorplanEditorProps> = ({
                 m
               </span>
             </div>
+
+            {/* Live RF attenuation for this wall */}
+            {(() => {
+              const customAtt = project.customAttenuation?.[selectedWall.material];
+              const getBandAtt = (band: '433' | '868' | '2400' | '5000') =>
+                customAtt?.[band] ?? WALL_ATTENUATION_DB[selectedWall.material]?.[band] ?? 10;
+              const factor = Math.max(0.5, selectedWall.thicknessCm / 15);
+              const loss433 = Math.round(getBandAtt('433') * factor * 10) / 10;
+              const loss868 = Math.round(getBandAtt('868') * factor * 10) / 10;
+              const loss24 = Math.round(getBandAtt('2400') * factor * 10) / 10;
+              const loss5 = Math.round(getBandAtt('5000') * factor * 10) / 10;
+
+              return (
+                <div className="pt-2 border-t border-slate-800 text-[10px] space-y-1">
+                  <div className="text-slate-400 flex justify-between font-bold">
+                    <span>Vypočtený RF útlum zdi:</span>
+                    <span className="text-amber-400 font-mono">Faktor {factor.toFixed(2)}x</span>
+                  </div>
+                  <div className="grid grid-cols-4 gap-1 text-center font-mono">
+                    <div className="bg-slate-800/80 p-1 rounded">
+                      <div className="text-[9px] text-slate-500">433M</div>
+                      <div className="text-cyan-300 font-bold">-{loss433}dB</div>
+                    </div>
+                    <div className="bg-slate-800/80 p-1 rounded">
+                      <div className="text-[9px] text-slate-500">868M</div>
+                      <div className="text-purple-300 font-bold">-{loss868}dB</div>
+                    </div>
+                    <div className="bg-slate-800/80 p-1 rounded">
+                      <div className="text-[9px] text-slate-500">2.4G</div>
+                      <div className="text-emerald-300 font-bold">-{loss24}dB</div>
+                    </div>
+                    <div className="bg-slate-800/80 p-1 rounded">
+                      <div className="text-[9px] text-slate-500">5.0G</div>
+                      <div className="text-red-300 font-bold">-{loss5}dB</div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         )}
 
@@ -1206,6 +1256,142 @@ export const FloorplanEditor: React.FC<FloorplanEditorProps> = ({
                   </div>
                 );
               })}
+            </div>
+          )}
+
+          {sidebarTab === 'materials' && (
+            <div className="space-y-3">
+              <div className="text-[11px] text-slate-400 flex items-center justify-between">
+                <span>Uživatelské útlumy materiálů (dB / 15cm):</span>
+                {project.customAttenuation && (
+                  <button
+                    onClick={() =>
+                      onUpdateProject({
+                        ...project,
+                        customAttenuation: undefined,
+                      })
+                    }
+                    className="text-amber-400 hover:text-amber-300 text-[10px] underline font-bold"
+                  >
+                    Reset ITU-R
+                  </button>
+                )}
+              </div>
+
+              {/* Quick Preset Buttons */}
+              <div className="grid grid-cols-2 gap-1.5 text-[10px]">
+                <button
+                  onClick={() =>
+                    onUpdateProject({
+                      ...project,
+                      customAttenuation: {
+                        ...(project.customAttenuation || {}),
+                        stone: { '433': 24, '868': 30, '2400': 42, '5000': 55 },
+                        brick_30cm: { '433': 12, '868': 15, '2400': 20, '5000': 28 },
+                      },
+                    })
+                  }
+                  className="p-1.5 rounded bg-amber-950/60 hover:bg-amber-900 border border-amber-700/60 text-amber-300 font-bold text-center"
+                >
+                  Kamenný dům
+                </button>
+                <button
+                  onClick={() =>
+                    onUpdateProject({
+                      ...project,
+                      customAttenuation: {
+                        ...(project.customAttenuation || {}),
+                        plasterboard: { '433': 1.2, '868': 1.8, '2400': 2.5, '5000': 3.8 },
+                        wood: { '433': 1.2, '868': 1.6, '2400': 2.2, '5000': 3.2 },
+                      },
+                    })
+                  }
+                  className="p-1.5 rounded bg-sky-950/60 hover:bg-sky-900 border border-sky-700/60 text-sky-300 font-bold text-center"
+                >
+                  Sádrokarton
+                </button>
+              </div>
+
+              {/* Materials list */}
+              <div className="space-y-2">
+                {(Object.keys(MATERIAL_METADATA) as WallMaterial[]).map((matKey) => {
+                  const meta = MATERIAL_METADATA[matKey];
+                  const custom = project.customAttenuation?.[matKey];
+                  const isModified = !!custom && Object.keys(custom).length > 0;
+
+                  const getVal = (b: '433' | '868' | '2400' | '5000') =>
+                    custom?.[b] ?? WALL_ATTENUATION_DB[matKey][b];
+
+                  const updateBand = (b: '433' | '868' | '2400' | '5000', v: number) => {
+                    const current = {
+                      ...WALL_ATTENUATION_DB[matKey],
+                      ...(project.customAttenuation?.[matKey] || {}),
+                    };
+                    current[b] = Math.max(0.1, Math.min(90, Math.round(v * 10) / 10));
+                    onUpdateProject({
+                      ...project,
+                      customAttenuation: {
+                        ...(project.customAttenuation || {}),
+                        [matKey]: current,
+                      },
+                    });
+                  };
+
+                  return (
+                    <div
+                      key={matKey}
+                      className={`p-2 rounded-lg border text-[11px] space-y-1.5 ${
+                        isModified
+                          ? 'bg-slate-900/90 border-cyan-500/70'
+                          : 'bg-slate-900/50 border-slate-800'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between font-bold">
+                        <span className="flex items-center gap-1.5 text-slate-200">
+                          <span
+                            className="w-2.5 h-2.5 rounded-full shrink-0"
+                            style={{ backgroundColor: meta.badgeColor }}
+                          />
+                          {meta.name}
+                        </span>
+                        {isModified && (
+                          <button
+                            onClick={() => {
+                              const newCustom = { ...(project.customAttenuation || {}) };
+                              delete newCustom[matKey];
+                              onUpdateProject({
+                                ...project,
+                                customAttenuation:
+                                  Object.keys(newCustom).length > 0 ? newCustom : undefined,
+                              });
+                            }}
+                            className="text-[9px] text-amber-400 hover:text-white"
+                          >
+                            Reset
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-4 gap-1 text-[10px]">
+                        {(['433', '868', '2400', '5000'] as const).map((b) => (
+                          <div key={b} className="space-y-0.5">
+                            <span className="text-[9px] text-slate-400 block font-mono">
+                              {b === '2400' ? '2.4G' : b === '5000' ? '5.0G' : `${b}M`}
+                            </span>
+                            <input
+                              type="number"
+                              step="0.5"
+                              value={getVal(b)}
+                              onChange={(e) => updateBand(b, parseFloat(e.target.value) || 0.1)}
+                              className="w-full bg-slate-800 border border-slate-700 rounded px-1 py-0.5 text-center text-cyan-300 font-bold focus:outline-none"
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
 

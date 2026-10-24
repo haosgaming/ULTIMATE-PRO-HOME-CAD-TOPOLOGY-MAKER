@@ -154,7 +154,9 @@ export const FloorplanCanvas2D: React.FC<FloorplanCanvas2DProps> = ({
             const signal = calculateSignalAtPoint(
               activeTx,
               { x: gx, y: gy, z: 1.0 },
-              project.walls
+              project.walls,
+              0,
+              project.customAttenuation
             );
 
             let effectiveRssi = signal.rssiDbm;

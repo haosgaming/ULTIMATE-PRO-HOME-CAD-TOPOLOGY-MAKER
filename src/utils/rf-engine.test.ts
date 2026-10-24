@@ -119,3 +119,39 @@ test('Stone wall with 60cm thickness produces high RF attenuation', () => {
   assert.ok(throughStoneResult.wallLossDb >= 60);
 });
 
+test('calculateSignalAtPoint respects customAttenuation dictionary', () => {
+  const tx: RFDevice = {
+    id: 'test-tx',
+    name: 'Test AP',
+    ip: '192.168.1.1',
+    mac: '78:2B:CB:19:0D:F1',
+    position: { x: 0, y: 0, z: 1 },
+    frequencyMHz: 2400,
+    txPowerDbm: 20,
+    hardwareAttenuationOffsetDb: 0,
+    antennaGainDbi: 0,
+    protocol: 'WIFI_2_4',
+  };
+
+  const wall: WallSegment = {
+    id: 'w-custom',
+    p1: { x: 2, y: -5 },
+    p2: { x: 2, y: 5 },
+    thicknessCm: 15,
+    heightM: 2.7,
+    material: 'brick_15cm',
+  };
+
+  // Default attenuation for brick_15cm at 2400MHz is 8 dB
+  const defaultRes = calculateSignalAtPoint(tx, { x: 4, y: 0, z: 1 }, [wall]);
+  assert.equal(defaultRes.wallLossDb, 8);
+
+  // Custom attenuation overrides it to 25 dB
+  const customRes = calculateSignalAtPoint(tx, { x: 4, y: 0, z: 1 }, [wall], 0, {
+    brick_15cm: { '2400': 25 },
+  });
+  assert.equal(customRes.wallLossDb, 25);
+  assert.equal(customRes.rssiDbm, defaultRes.rssiDbm - 17);
+});
+
+

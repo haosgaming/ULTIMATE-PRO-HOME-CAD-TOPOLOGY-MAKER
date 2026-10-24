@@ -513,7 +513,9 @@ export const Scene3D: React.FC<Scene3DProps> = ({
           const signal = calculateSignalAtPoint(
             activeTx,
             { x: vx, y: vy, z: 1.0 },
-            project.walls
+            project.walls,
+            0,
+            project.customAttenuation
           );
 
           // Apply extra ambient noise floor or interference

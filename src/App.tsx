@@ -18,6 +18,7 @@ import { NotesEditor } from './components/NotesEditor.tsx';
 import { exportTopologyToPdf } from './utils/pdf-exporter.ts';
 import { HouseWizardModal } from './components/HouseWizardModal.tsx';
 import { CiscoDeviceModal } from './components/CiscoDeviceModal.tsx';
+import { MaterialsEditor } from './components/MaterialsEditor.tsx';
 import { RFDevice, calculateSignalAtPoint } from './utils/rf-engine.ts';
 import {
   Box,
@@ -42,6 +43,7 @@ import {
   Compass,
   Home,
   Cable,
+  Sliders,
 } from 'lucide-react';
 
 export default function App() {
@@ -56,7 +58,7 @@ export default function App() {
   } = useProjectHistory(INITIAL_PROJECT);
 
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
-  const [activeTab, setActiveTab] = useState<'3d' | 'editor' | '2d' | 'topology' | 'notes'>('editor');
+  const [activeTab, setActiveTab] = useState<'3d' | 'editor' | '2d' | 'topology' | 'materials' | 'notes'>('editor');
   const [selectedItemId, setSelectedItemId] = useState<string | null>('dev-subghz-gw');
   const [selectedItemType, setSelectedItemType] = useState<
     'device' | 'wall' | 'furniture' | 'conduit' | 'room' | undefined
@@ -250,6 +252,18 @@ export default function App() {
               }`}
             >
               <Network className="w-3.5 h-3.5" /> Topologie & Matice
+            </button>
+
+            <button
+              onClick={() => setActiveTab('materials')}
+              className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition font-bold ${
+                activeTab === 'materials'
+                  ? 'bg-gradient-to-r from-cyan-500 to-blue-500 text-slate-950 shadow-md shadow-cyan-500/20'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+              title="Katalog materiálů zdiva a definice uživatelských hodnot útlumu (dB)"
+            >
+              <Sliders className="w-3.5 h-3.5" /> Materiály & Útlum
             </button>
 
             <button
@@ -536,7 +550,13 @@ export default function App() {
                         const src = project.devices.find((d) => d.id === conn.sourceDeviceId);
                         const tgt = project.devices.find((d) => d.id === conn.targetDeviceId);
                         if (!src || !tgt) return null;
-                        const signal = calculateSignalAtPoint(src, tgt.position, project.walls);
+                        const signal = calculateSignalAtPoint(
+                          src,
+                          tgt.position,
+                          project.walls,
+                          0,
+                          project.customAttenuation
+                        );
 
                         return (
                           <tr key={conn.id} className="hover:bg-slate-800/20 transition">
@@ -597,7 +617,19 @@ export default function App() {
             </div>
           )}
 
-          {/* 5. NOTES AND SECTION DOCUMENTATION */}
+          {/* 5. MATERIALS & ATTENUATION CATALOG */}
+          {activeTab === 'materials' && (
+            <div className="w-full h-full overflow-hidden">
+              <MaterialsEditor
+                project={project}
+                onUpdateProject={setProject}
+                theme={theme}
+                onNavigateToEditor={() => setActiveTab('editor')}
+              />
+            </div>
+          )}
+
+          {/* 6. NOTES AND SECTION DOCUMENTATION */}
           {activeTab === 'notes' && (
             <div className="w-full h-full p-4">
               <NotesEditor project={project} onUpdateProject={setProject} />
