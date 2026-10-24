@@ -8,6 +8,9 @@ import {
   MaterialMetadata,
   MATERIAL_METADATA,
   WALL_ATTENUATION_DB,
+  RFInterferenceSource,
+  InterferenceSourceType,
+  SignalCalculationResult,
 } from '../utils/rf-engine.ts';
 export type {
   Position3D,
@@ -17,6 +20,9 @@ export type {
   DevicePort,
   MaterialAttenuationMap,
   MaterialMetadata,
+  RFInterferenceSource,
+  InterferenceSourceType,
+  SignalCalculationResult,
 };
 export { MATERIAL_METADATA, WALL_ATTENUATION_DB };
 
@@ -96,12 +102,13 @@ export interface SignalSimParams {
   frequencyBand: '433' | '868' | '2400' | '5000' | 'auto';
   txPowerDbm: number;
   antennaGainDbi: number;
-  noiseFloorDbm: number; // -105 dBm typical
+  noiseFloorDbm: number; // -105 dBm typical thermal noise floor
   interferenceType: InterferenceType;
   interferenceIntensityDb: number;
   enableBalunFilterPenalty: boolean; // For CC1101 868MHz balun on 433MHz (-30 dB)
   showIsolines: boolean;
   resolutionCm: number; // Heatmap grid step: 20cm or 50cm
+  heatmapMetric?: 'rssi' | 'snr'; // Visualization mode
 }
 
 export interface TopologyProject {
@@ -115,6 +122,7 @@ export interface TopologyProject {
   furniture: FurnitureItem[];
   devices: RFDevice[];
   connections: NetworkConnection[];
+  interferenceSources?: RFInterferenceSource[];
   notes: string;
   customAttenuation?: MaterialAttenuationMap;
   nasConfig: {

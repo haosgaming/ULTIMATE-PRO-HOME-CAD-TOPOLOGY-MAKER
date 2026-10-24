@@ -375,6 +375,7 @@ export default function App() {
               project={project}
               simParams={simParams}
               onChangeSimParams={setSimParams}
+              onUpdateProject={setProject}
             />
 
             {/* Layer Visibility Matrix */}
@@ -542,6 +543,7 @@ export default function App() {
                         <th className="py-2.5 px-3">3D Vzdálenost</th>
                         <th className="py-2.5 px-3">Zdi v trase</th>
                         <th className="py-2.5 px-3">RSSI</th>
+                        <th className="py-2.5 px-3">SNR / Šum</th>
                         <th className="py-2.5 px-3">Stav Linky</th>
                       </tr>
                     </thead>
@@ -555,7 +557,9 @@ export default function App() {
                           tgt.position,
                           project.walls,
                           0,
-                          project.customAttenuation
+                          project.customAttenuation,
+                          project.interferenceSources,
+                          simParams.noiseFloorDbm
                         );
 
                         return (
@@ -593,6 +597,24 @@ export default function App() {
                               >
                                 {signal.rssiDbm} dBm
                               </span>
+                            </td>
+                            <td className="py-2.5 px-3">
+                              <div className="flex items-center gap-1.5">
+                                <span
+                                  className={`font-bold ${
+                                    signal.snrDb >= 20
+                                      ? 'text-emerald-400'
+                                      : signal.snrDb >= 10
+                                      ? 'text-amber-400'
+                                      : 'text-red-400'
+                                  }`}
+                                >
+                                  {signal.snrDb} dB
+                                </span>
+                                <span className="text-[10px] text-slate-500">
+                                  ({signal.noiseFloorDbm} dBm)
+                                </span>
+                              </div>
                             </td>
                             <td className="py-2.5 px-3">
                               <span

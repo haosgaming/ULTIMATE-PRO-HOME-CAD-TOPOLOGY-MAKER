@@ -154,4 +154,160 @@ test('calculateSignalAtPoint respects customAttenuation dictionary', () => {
   assert.equal(customRes.rssiDbm, defaultRes.rssiDbm - 17);
 });
 
+test('Microwave 2.45GHz interference degrades SNR on 2.4GHz Zigbee/Wi-Fi but isolates 433MHz Sub-GHz', () => {
+  const zigbeeTx: RFDevice = {
+    id: 'zigbee-tx',
+    name: 'Home Assistant Zigbee Dongle-E',
+    ip: '192.168.1.110',
+    mac: 'B0:5C:DA:3B:05:A9',
+    position: { x: 5, y: 5, z: 1.2 },
+    frequencyMHz: 2400,
+    txPowerDbm: 10,
+    hardwareAttenuationOffsetDb: 0,
+    antennaGainDbi: 2,
+    protocol: 'ZIGBEE_2_4',
+  };
+
+  const subGhzTx: RFDevice = {
+    id: 'subghz-tx',
+    name: 'ESP32-S3 CC1101 Gateway',
+    ip: '192.168.1.109',
+    mac: '30:ED:A0:BD:31:F4',
+    position: { x: 5, y: 5, z: 1.2 },
+    frequencyMHz: 433.92,
+    txPowerDbm: 10,
+    hardwareAttenuationOffsetDb: 0,
+    antennaGainDbi: 2,
+    protocol: 'RF433_EV1527',
+  };
+
+  const rxTarget = { x: 6, y: 5, z: 1.2 }; // 1 meter away from transmitter
+
+  // Spatial Microwave Interferer placed 0.5m away from receiver
+  const microwaveSource = {
+    id: 'microwave-1',
+    name: 'Mikrovlnná trouba',
+    type: 'microwave' as const,
+    position: { x: 6.5, y: 5, z: 1.0 },
+    frequencyMHz: 2450,
+    txPowerDbm: 12,
+    bandwidthMHz: 40,
+    isActive: true,
+  };
+
+  // Clean baseline (no interference sources)
+  const cleanZigbee = calculateSignalAtPoint(zigbeeTx, rxTarget, [], 0, undefined, [], -105);
+  assert.ok(cleanZigbee.snrDb > 40);
+  assert.equal(cleanZigbee.linkStatus, 'NOMINAL');
+
+  // With active Microwave oven nearby on 2.45 GHz
+  const interferedZigbee = calculateSignalAtPoint(
+    zigbeeTx,
+    rxTarget,
+    [],
+    0,
+    undefined,
+    [microwaveSource],
+    -105
+  );
+
+  // Noise floor should increase substantially from -105 dBm
+  assert.ok(interferedZigbee.noiseFloorDbm > -75);
+  // SNR should degrade significantly (by at least 25 dB)
+  assert.ok(cleanZigbee.snrDb - interferedZigbee.snrDb > 25);
+  assert.equal(interferedZigbee.dominantInterferer, 'Mikrovlnná trouba');
+
+  // Conversely, 433.92 MHz Sub-GHz receiver has >50 dB frontend RF filter rejection against 2.45GHz
+  const subGhzResult = calculateSignalAtPoint(
+    subGhzTx,
+    rxTarget,
+    [],
+    0,
+    undefined,
+    [microwaveSource],
+    -105
+  );
+  // 433MHz should stay Nominal with high SNR
+  assert.ok(subGhzResult.snrDb >= 25);
+  assert.equal(subGhzResult.linkStatus, 'NOMINAL');
+});
+
+test('Inactive interference source does not affect SNR, and walls attenuate interference', () => {
+  const tx: RFDevice = {
+    id: 'wifi-ap',
+    name: 'ROUTERBE3600 (OpenWrt)',
+    ip: '192.168.1.1',
+    mac: '78:2B:CB:19:0D:F1',
+    position: { x: 0, y: 0, z: 1.5 },
+    frequencyMHz: 2400,
+    txPowerDbm: 20,
+    hardwareAttenuationOffsetDb: 0,
+    antennaGainDbi: 3,
+    protocol: 'WIFI_2_4',
+  };
+
+  const rxTarget = { x: 4, y: 0, z: 1.5 };
+
+  const activeInterferer = {
+    id: 'int-rogue-ap',
+    name: 'Rogue AP',
+    type: 'wifi_cochannel' as const,
+    position: { x: 5, y: 0, z: 1.5 },
+    frequencyMHz: 2400,
+    txPowerDbm: 20,
+    bandwidthMHz: 20,
+    isActive: true,
+  };
+
+  const inactiveInterferer = { ...activeInterferer, isActive: false };
+
+  // 1. Inactive source => baseline thermal noise floor
+  const inactiveResult = calculateSignalAtPoint(
+    tx,
+    rxTarget,
+    [],
+    0,
+    undefined,
+    [inactiveInterferer],
+    -105
+  );
+  assert.equal(inactiveResult.noiseFloorDbm, -105);
+
+  // 2. Active source in direct line of sight => severe interference
+  const directInterference = calculateSignalAtPoint(
+    tx,
+    rxTarget,
+    [],
+    0,
+    undefined,
+    [activeInterferer],
+    -105
+  );
+  assert.ok(directInterference.noiseFloorDbm > -65);
+
+  // 3. Wall placed between interferer and receiver (x=4.5)
+  const shieldWall: WallSegment = {
+    id: 'shield-wall',
+    p1: { x: 4.5, y: -5 },
+    p2: { x: 4.5, y: 5 },
+    thicknessCm: 25,
+    heightM: 2.7,
+    material: 'reinforced_concrete', // ~27dB attenuation at 2.4GHz
+  };
+
+  const shieldedInterference = calculateSignalAtPoint(
+    tx,
+    rxTarget,
+    [shieldWall],
+    0,
+    undefined,
+    [activeInterferer],
+    -105
+  );
+
+  // Shielded noise floor should be lower (less interference) than direct interference by > 20 dB
+  assert.ok(shieldedInterference.noiseFloorDbm < directInterference.noiseFloorDbm - 20);
+});
+
+
 

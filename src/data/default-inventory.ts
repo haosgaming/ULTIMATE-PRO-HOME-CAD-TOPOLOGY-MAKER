@@ -614,6 +614,41 @@ export const INITIAL_PROJECT: TopologyProject = {
       status: 'UP', // Pouze na krátkou vzdálenost kvůli filtru!
     },
   ],
+  interferenceSources: [
+    {
+      id: 'int-microwave',
+      name: 'Mikrovlnná trouba (Magnetron CW leakage)',
+      type: 'microwave',
+      position: { x: 5.5, y: 5.2, z: 0.9 },
+      frequencyMHz: 2450,
+      txPowerDbm: 12,
+      bandwidthMHz: 40,
+      isActive: false,
+      notes: 'Únik mikrovlnného záření z těsnění dvířek magnetronu. Způsobuje prudký pokles SNR na 2.4GHz pásmu.',
+    },
+    {
+      id: 'int-bt-flood',
+      name: 'ESPHome BLE Proxy Advertising Flood',
+      type: 'bluetooth',
+      position: { x: 4.2, y: 1.8, z: 1.2 },
+      frequencyMHz: 2440,
+      txPowerDbm: 4,
+      bandwidthMHz: 80,
+      isActive: false,
+      notes: 'Vysoká hustota BLE iBeacon / BTHome paketů způsobující kolize na Zigbee kanálech 15-25.',
+    },
+    {
+      id: 'int-wifi-neighbor',
+      name: 'Sousední Wi-Fi AP 2.4GHz (Přes zeď, Ch 6)',
+      type: 'wifi_cochannel',
+      position: { x: 6.8, y: -0.5, z: 1.5 },
+      frequencyMHz: 2437,
+      txPowerDbm: 18,
+      bandwidthMHz: 20,
+      isActive: false,
+      notes: 'Ko-kanálové rušení z vedlejšího objektu přes obvodové zdivo snižující SNR na kanálu 6.',
+    },
+  ],
   notes: `# Projektová dokumentace IoT & LAN Topologie
 - Proxmox VE 7.4 na Dell R510 (Kernel 5.15, Westmere-EP bez AVX).
 - BARE-METAL HAOS 18.3 na 192.168.1.110.

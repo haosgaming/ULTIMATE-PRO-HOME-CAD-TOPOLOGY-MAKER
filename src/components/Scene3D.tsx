@@ -494,6 +494,110 @@ export const Scene3D: React.FC<Scene3DProps> = ({
       }
     });
 
+    // 5b. Render Spatial Interference Sources (Microwave, BLE Beacon, Co-channel Wi-Fi, Motor EMI)
+    const interferenceSources = project.interferenceSources || [];
+    interferenceSources.forEach((src) => {
+      const intGroup = new THREE.Group();
+
+      if (src.type === 'microwave') {
+        // Microwave body
+        const bodyGeo = new THREE.BoxGeometry(0.5, 0.32, 0.38);
+        const bodyMat = new THREE.MeshStandardMaterial({
+          color: 0x334155,
+          metalness: 0.7,
+          roughness: 0.3,
+        });
+        const body = new THREE.Mesh(bodyGeo, bodyMat);
+        body.position.set(0, 0.16, 0);
+        body.castShadow = true;
+        intGroup.add(body);
+
+        // Door window with amber glow if active
+        const doorGeo = new THREE.PlaneGeometry(0.3, 0.22);
+        const doorMat = new THREE.MeshStandardMaterial({
+          color: src.isActive ? 0xf59e0b : 0x0f172a,
+          emissive: src.isActive ? 0xf59e0b : 0x000000,
+          emissiveIntensity: src.isActive ? 0.7 : 0,
+          roughness: 0.1,
+          metalness: 0.9,
+        });
+        const door = new THREE.Mesh(doorGeo, doorMat);
+        door.position.set(-0.06, 0.16, 0.191);
+        intGroup.add(door);
+
+        // Control panel / Dial
+        const dialGeo = new THREE.CylinderGeometry(0.02, 0.02, 0.015, 8);
+        const dialMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, metalness: 0.8 });
+        const dial = new THREE.Mesh(dialGeo, dialMat);
+        dial.rotation.x = Math.PI / 2;
+        dial.position.set(0.16, 0.18, 0.195);
+        intGroup.add(dial);
+      } else if (src.type === 'bluetooth') {
+        // BLE Beacon Puck
+        const puckGeo = new THREE.CylinderGeometry(0.08, 0.09, 0.04, 16);
+        const puckMat = new THREE.MeshStandardMaterial({
+          color: 0x1e1b4b,
+          roughness: 0.4,
+        });
+        const puck = new THREE.Mesh(puckGeo, puckMat);
+        puck.position.set(0, 0.02, 0);
+        intGroup.add(puck);
+
+        // Glowing LED
+        const ledGeo = new THREE.SphereGeometry(0.015, 8, 8);
+        const ledMat = new THREE.MeshBasicMaterial({
+          color: src.isActive ? 0xa855f7 : 0x475569,
+        });
+        const led = new THREE.Mesh(ledGeo, ledMat);
+        led.position.set(0, 0.045, 0);
+        intGroup.add(led);
+      } else if (src.type === 'wifi_cochannel') {
+        // Rogue AP box with dual antennas
+        const apGeo = new THREE.BoxGeometry(0.22, 0.05, 0.16);
+        const apMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.5 });
+        const ap = new THREE.Mesh(apGeo, apMat);
+        ap.position.set(0, 0.025, 0);
+        intGroup.add(ap);
+
+        // Hazard dual antennas
+        [-0.08, 0.08].forEach((ax) => {
+          const antGeo = new THREE.CylinderGeometry(0.006, 0.006, 0.18, 8);
+          const antMat = new THREE.MeshBasicMaterial({ color: src.isActive ? 0xef4444 : 0x64748b });
+          const ant = new THREE.Mesh(antGeo, antMat);
+          ant.position.set(ax, 0.12, -0.06);
+          ant.rotation.x = -0.2;
+          intGroup.add(ant);
+        });
+      } else {
+        // Motor / EMI source block
+        const motorGeo = new THREE.CylinderGeometry(0.12, 0.12, 0.28, 12);
+        const motorMat = new THREE.MeshStandardMaterial({ color: 0x475569, metalness: 0.8, roughness: 0.3 });
+        const motor = new THREE.Mesh(motorGeo, motorMat);
+        motor.rotation.z = Math.PI / 2;
+        motor.position.set(0, 0.14, 0);
+        intGroup.add(motor);
+      }
+
+      // Ground hazard ring if active
+      if (src.isActive) {
+        const hazardRingGeo = new THREE.RingGeometry(0.4, 0.44, 24);
+        const hazardRingMat = new THREE.MeshBasicMaterial({
+          color: src.type === 'microwave' ? 0xf59e0b : 0xef4444,
+          side: THREE.DoubleSide,
+          transparent: true,
+          opacity: 0.7,
+        });
+        const ring = new THREE.Mesh(hazardRingGeo, hazardRingMat);
+        ring.rotation.x = -Math.PI / 2;
+        ring.position.set(0, 0.01, 0);
+        intGroup.add(ring);
+      }
+
+      intGroup.position.set(src.position.x, src.position.z, src.position.y);
+      (intGroup as any).userData = { id: src.id, type: 'interference_source' };
+      group.add(intGroup);
+    });
+
     // 6. Render 3D RF Signal Heatmap Ground Plane if enabled
     if (showSignalHeatmap) {
       const activeTx = project.devices.find((d) => d.id === simParams.activeTxDeviceId) || project.devices[0];
@@ -515,28 +619,40 @@ export const Scene3D: React.FC<Scene3DProps> = ({
             { x: vx, y: vy, z: 1.0 },
             project.walls,
             0,
-            project.customAttenuation
+            project.customAttenuation,
+            project.interferenceSources,
+            simParams.noiseFloorDbm
           );
 
-          // Apply extra ambient noise floor or interference
-          let effectiveRssi = signal.rssiDbm;
-          if (simParams.interferenceType !== 'none') {
-            effectiveRssi -= simParams.interferenceIntensityDb;
-          }
-
-          // Normalized color 0..1 (-100 dBm to -40 dBm)
-          const norm = Math.max(0, Math.min(1, (effectiveRssi + 95) / 55));
-
-          // Color gradient: Red (drop) -> Amber (marginal) -> Green/Cyan (strong)
           let c = new THREE.Color();
-          if (norm < 0.3) {
-            c.setRGB(0.9, 0.1, 0.1); // Crimson
-          } else if (norm < 0.6) {
-            c.setRGB(0.95, 0.6, 0.0); // Amber
-          } else if (norm < 0.85) {
-            c.setRGB(0.06, 0.72, 0.5); // Emerald Green
+          if (simParams.heatmapMetric === 'snr') {
+            const snr = signal.snrDb;
+            if (snr < 8) {
+              c.setRGB(0.9, 0.1, 0.1); // Crimson (Dropped / Unusable)
+            } else if (snr < 15) {
+              c.setRGB(0.95, 0.6, 0.0); // Amber (Marginal)
+            } else if (snr < 25) {
+              c.setRGB(0.06, 0.72, 0.5); // Emerald Green (Stable)
+            } else {
+              c.setRGB(0.0, 0.94, 1.0); // Electric Cyan (Nominal)
+            }
           } else {
-            c.setRGB(0.0, 0.94, 1.0); // Electric Cyan
+            let effectiveRssi = signal.rssiDbm;
+            if (simParams.interferenceType !== 'none') {
+              effectiveRssi -= simParams.interferenceIntensityDb;
+            }
+            const norm = Math.max(0, Math.min(1, (effectiveRssi + 95) / 55));
+            if (signal.snrDb < 10) {
+              c.setRGB(0.9, 0.1, 0.1); // Crimson on low SNR
+            } else if (norm < 0.3) {
+              c.setRGB(0.9, 0.1, 0.1);
+            } else if (norm < 0.6) {
+              c.setRGB(0.95, 0.6, 0.0);
+            } else if (norm < 0.85) {
+              c.setRGB(0.06, 0.72, 0.5);
+            } else {
+              c.setRGB(0.0, 0.94, 1.0);
+            }
           }
 
           colors.push(c.r, c.g, c.b);

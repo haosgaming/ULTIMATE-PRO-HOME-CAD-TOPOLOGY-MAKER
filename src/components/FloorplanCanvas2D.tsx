@@ -156,7 +156,9 @@ export const FloorplanCanvas2D: React.FC<FloorplanCanvas2DProps> = ({
               { x: gx, y: gy, z: 1.0 },
               project.walls,
               0,
-              project.customAttenuation
+              project.customAttenuation,
+              project.interferenceSources,
+              simParams.noiseFloorDbm
             );
 
             let effectiveRssi = signal.rssiDbm;
@@ -164,21 +166,38 @@ export const FloorplanCanvas2D: React.FC<FloorplanCanvas2DProps> = ({
               effectiveRssi -= simParams.interferenceIntensityDb;
             }
 
-            // Normalise (-95 dBm to -40 dBm)
-            const norm = Math.max(0, Math.min(1, (effectiveRssi + 95) / 55));
             const p = worldToScreen(gx, gy);
             const w = stepMeters * scale;
             const h = stepMeters * scale;
+            const alpha = 0.32;
 
-            let alpha = 0.28;
-            if (norm > 0.7) {
-              ctx.fillStyle = `rgba(0, 240, 255, ${alpha})`; // Electric Cyan
-            } else if (norm > 0.45) {
-              ctx.fillStyle = `rgba(16, 185, 129, ${alpha})`; // Emerald Green
-            } else if (norm > 0.25) {
-              ctx.fillStyle = `rgba(245, 158, 11, ${alpha})`; // Solar Amber
+            if (simParams.heatmapMetric === 'snr') {
+              // SNR Heatmap visualization (dB)
+              const snr = signal.snrDb;
+              if (snr >= 25) {
+                ctx.fillStyle = `rgba(0, 240, 255, ${alpha})`; // Electric Cyan (Nominal)
+              } else if (snr >= 15) {
+                ctx.fillStyle = `rgba(16, 185, 129, ${alpha})`; // Emerald Green (Stable)
+              } else if (snr >= 8) {
+                ctx.fillStyle = `rgba(245, 158, 11, ${alpha})`; // Solar Amber (Marginal)
+              } else {
+                ctx.fillStyle = `rgba(239, 68, 68, ${alpha})`; // ROG Crimson (Dropped/Heavy interference)
+              }
             } else {
-              ctx.fillStyle = `rgba(239, 68, 68, ${alpha})`; // Crimson
+              // RSSI Heatmap visualization (-95 dBm to -40 dBm)
+              const norm = Math.max(0, Math.min(1, (effectiveRssi + 95) / 55));
+              // If SNR is critical, degrade color to indicate unusable channel
+              if (signal.snrDb < 10) {
+                ctx.fillStyle = `rgba(239, 68, 68, ${alpha})`; // Red warning on interference
+              } else if (norm > 0.7) {
+                ctx.fillStyle = `rgba(0, 240, 255, ${alpha})`; // Electric Cyan
+              } else if (norm > 0.45) {
+                ctx.fillStyle = `rgba(16, 185, 129, ${alpha})`; // Emerald Green
+              } else if (norm > 0.25) {
+                ctx.fillStyle = `rgba(245, 158, 11, ${alpha})`; // Solar Amber
+              } else {
+                ctx.fillStyle = `rgba(239, 68, 68, ${alpha})`; // Crimson
+              }
             }
             ctx.fillRect(p.x, p.y, w, h);
           }
@@ -435,6 +454,76 @@ export const FloorplanCanvas2D: React.FC<FloorplanCanvas2DProps> = ({
         ctx.fillText(`${dev.ip}`, pos.x, pos.y + 16);
       });
     }
+
+    // 8b. Spatial RF Interference Sources (Microwave, BT storm, Co-channel Wi-Fi, Motor EMI)
+    const interferenceSources = project.interferenceSources || [];
+    interferenceSources.forEach((intSrc) => {
+      const pos = worldToScreen(intSrc.position.x, intSrc.position.y);
+      const isActive = intSrc.isActive;
+
+      if (isActive) {
+        // Concentric interference hazard circles
+        ctx.strokeStyle = intSrc.type === 'microwave' ? '#f59e0b' : '#ef4444';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([3, 3]);
+
+        // Range rings around interferer (1.2m and 2.4m)
+        [1.2, 2.4].forEach((radiusM) => {
+          ctx.beginPath();
+          ctx.arc(pos.x, pos.y, radiusM * scale, 0, Math.PI * 2);
+          ctx.stroke();
+        });
+        ctx.setLineDash([]);
+
+        // Danger beacon ring
+        ctx.beginPath();
+        ctx.arc(pos.x, pos.y, 11, 0, Math.PI * 2);
+        ctx.fillStyle = intSrc.type === 'microwave' ? 'rgba(245, 158, 11, 0.25)' : 'rgba(239, 68, 68, 0.25)';
+        ctx.fill();
+
+        // Crosshair / Hazard Diamond
+        ctx.beginPath();
+        ctx.moveTo(pos.x, pos.y - 7);
+        ctx.lineTo(pos.x + 7, pos.y);
+        ctx.lineTo(pos.x, pos.y + 7);
+        ctx.lineTo(pos.x - 7, pos.y);
+        ctx.closePath();
+        ctx.fillStyle = intSrc.type === 'microwave' ? '#f59e0b' : '#ef4444';
+        ctx.fill();
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      } else {
+        // Inactive marker (greyed out)
+        ctx.beginPath();
+        ctx.arc(pos.x, pos.y, 5, 0, Math.PI * 2);
+        ctx.fillStyle = '#475569';
+        ctx.fill();
+        ctx.strokeStyle = '#334155';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
+
+      // Title & Telemetry label
+      ctx.textAlign = 'center';
+      ctx.font = 'bold 9px monospace';
+      ctx.fillStyle = isActive ? '#fbbf24' : '#64748b';
+      ctx.fillText(
+        `${isActive ? '⚡' : '⊘'} ${intSrc.name}`,
+        pos.x,
+        pos.y - (isActive ? 13 : 8)
+      );
+
+      if (isActive) {
+        ctx.font = '8px monospace';
+        ctx.fillStyle = '#94a3b8';
+        ctx.fillText(
+          `${intSrc.frequencyMHz}MHz | ${intSrc.txPowerDbm}dBm`,
+          pos.x,
+          pos.y + 16
+        );
+      }
+    });
 
     // 9. Drawing guide for new wall
     if (activeTool === 'draw_wall' && wallStartPoint) {

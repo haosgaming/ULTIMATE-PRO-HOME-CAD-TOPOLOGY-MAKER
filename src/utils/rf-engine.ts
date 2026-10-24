@@ -58,6 +58,38 @@ export interface RFDevice {
   roomName?: string;
 }
 
+export type InterferenceSourceType =
+  | 'microwave'
+  | 'bluetooth'
+  | 'wifi_cochannel'
+  | 'motor_emi'
+  | 'custom';
+
+export interface RFInterferenceSource {
+  id: string;
+  name: string;
+  type: InterferenceSourceType;
+  position: Position3D;
+  frequencyMHz: number;
+  txPowerDbm: number; // Leakage or TX power in dBm
+  bandwidthMHz: number;
+  isActive: boolean;
+  notes?: string;
+}
+
+export interface SignalCalculationResult {
+  distanceMeters: number;
+  rssiDbm: number;
+  freeSpaceLossDb: number;
+  wallLossDb: number;
+  intersectionsCount: number;
+  linkStatus: 'NOMINAL' | 'MARGINAL' | 'DROPPED';
+  noiseFloorDbm: number;
+  snrDb: number;
+  interferenceDbm: number;
+  dominantInterferer?: string;
+}
+
 export const WALL_ATTENUATION_DB: Record<WallMaterial, Record<'433' | '868' | '2400' | '5000', number>> = {
   reinforced_concrete: {
     '433': 18,
@@ -235,22 +267,155 @@ export function getFrequencyBandKey(freqMHz: number): '433' | '868' | '2400' | '
 }
 
 /**
- * Calculate RF link budget & signal RSSI at target point
+ * Calculate RF filter and spectral overlap attenuation (dB) between target receiver and interferer
+ */
+export function getFrequencyBandOverlapRejectionDb(
+  targetFreqMHz: number,
+  sourceFreqMHz: number,
+  sourceBandwidthMHz = 20
+): number {
+  const deltaF = Math.abs(targetFreqMHz - sourceFreqMHz);
+  const halfBw = Math.max(1, sourceBandwidthMHz / 2);
+
+  // Direct co-channel collision
+  if (deltaF <= halfBw) {
+    return 0; // Full co-channel coupling
+  }
+
+  // Adjacent channel overlap (e.g. Wi-Fi channel collision, Zigbee vs Wi-Fi 2.4G)
+  if (deltaF <= sourceBandwidthMHz * 1.5) {
+    const ratio = (deltaF - halfBw) / sourceBandwidthMHz;
+    return Math.round((8 + ratio * 16) * 10) / 10; // 8 to 24 dB rejection
+  }
+
+  // Within same RF band category (e.g. 2.4GHz ISM band: Bluetooth hopping vs Zigbee or microwave harmonic skirt)
+  const targetBand = getFrequencyBandKey(targetFreqMHz);
+  const sourceBand = getFrequencyBandKey(sourceFreqMHz);
+  if (targetBand === sourceBand) {
+    return 28; // ~28 dB adjacent ISM rejection
+  }
+
+  // Cross-band / Out-of-band: Frontend SAW / Balun / Ceramic filter attenuation
+  return 65; // 65 dB frontend filter isolation
+}
+
+export interface InterferenceEvaluationResult {
+  totalInterferenceDbm: number;
+  sourcesCount: number;
+  dominantInterferer?: string;
+  dominantInterfererPowerDbm?: number;
+  breakdown: Array<{
+    id: string;
+    name: string;
+    type: InterferenceSourceType;
+    receivedPowerDbm: number;
+    distanceMeters: number;
+    wallLossDb: number;
+    rejectionDb: number;
+  }>;
+}
+
+/**
+ * Calculate localized interference power at target evaluation point from all active spatial sources
+ */
+export function calculateInterferenceAtPoint(
+  targetPos: Position3D,
+  targetFreqMHz: number,
+  sources: RFInterferenceSource[] = [],
+  walls: WallSegment[] = [],
+  customAttenuation?: MaterialAttenuationMap
+): InterferenceEvaluationResult {
+  const activeSources = sources.filter((s) => s.isActive);
+  if (activeSources.length === 0) {
+    return {
+      totalInterferenceDbm: -150,
+      sourcesCount: 0,
+      breakdown: [],
+    };
+  }
+
+  let totalPowerMw = 0;
+  let dominantName: string | undefined = undefined;
+  let dominantPower = -999;
+  const breakdown: InterferenceEvaluationResult['breakdown'] = [];
+
+  const pRx = { x: targetPos.x, y: targetPos.y };
+
+  for (const src of activeSources) {
+    const dx = targetPos.x - src.position.x;
+    const dy = targetPos.y - src.position.y;
+    const dz = targetPos.z - src.position.z;
+    const distanceMeters = Math.sqrt(dx * dx + dy * dy + dz * dz);
+
+    const fspl = calculateFSPL(distanceMeters, src.frequencyMHz);
+    const srcBand = getFrequencyBandKey(src.frequencyMHz);
+
+    // Wall attenuation between interference source and receiver
+    let wallLossDb = 0;
+    const pSrc = { x: src.position.x, y: src.position.y };
+    for (const wall of walls) {
+      if (checkLineIntersection(pSrc, pRx, wall.p1, wall.p2)) {
+        const baseLoss =
+          customAttenuation?.[wall.material]?.[srcBand] ??
+          WALL_ATTENUATION_DB[wall.material]?.[srcBand] ??
+          10;
+        const thicknessFactor = Math.max(0.5, wall.thicknessCm / 15);
+        wallLossDb += baseLoss * thicknessFactor;
+      }
+    }
+
+    const rejectionDb = getFrequencyBandOverlapRejectionDb(
+      targetFreqMHz,
+      src.frequencyMHz,
+      src.bandwidthMHz
+    );
+
+    // Received interference power from this source
+    const receivedPowerDbm = src.txPowerDbm - fspl - wallLossDb - rejectionDb;
+    const powerMw = Math.pow(10, receivedPowerDbm / 10);
+    totalPowerMw += powerMw;
+
+    if (receivedPowerDbm > dominantPower) {
+      dominantPower = receivedPowerDbm;
+      dominantName = src.name;
+    }
+
+    breakdown.push({
+      id: src.id,
+      name: src.name,
+      type: src.type,
+      receivedPowerDbm: Math.round(receivedPowerDbm * 10) / 10,
+      distanceMeters: Math.round(distanceMeters * 100) / 100,
+      wallLossDb: Math.round(wallLossDb * 10) / 10,
+      rejectionDb: Math.round(rejectionDb * 10) / 10,
+    });
+  }
+
+  const totalInterferenceDbm =
+    totalPowerMw > 0 ? 10 * Math.log10(totalPowerMw) : -150;
+
+  return {
+    totalInterferenceDbm: Math.round(totalInterferenceDbm * 10) / 10,
+    sourcesCount: activeSources.length,
+    dominantInterferer: dominantName,
+    dominantInterfererPowerDbm:
+      dominantPower > -990 ? Math.round(dominantPower * 10) / 10 : undefined,
+    breakdown,
+  };
+}
+
+/**
+ * Calculate RF link budget, signal RSSI, effective noise floor, and SNR at target point
  */
 export function calculateSignalAtPoint(
   txDevice: RFDevice,
   targetPos: Position3D,
   walls: WallSegment[],
   rxAntennaGainDbi = 0,
-  customAttenuation?: MaterialAttenuationMap
-): {
-  distanceMeters: number;
-  rssiDbm: number;
-  freeSpaceLossDb: number;
-  wallLossDb: number;
-  intersectionsCount: number;
-  linkStatus: 'NOMINAL' | 'MARGINAL' | 'DROPPED';
-} {
+  customAttenuation?: MaterialAttenuationMap,
+  interferenceSources?: RFInterferenceSource[],
+  ambientNoiseFloorDbm = -105
+): SignalCalculationResult {
   const dx = targetPos.x - txDevice.position.x;
   const dy = targetPos.y - txDevice.position.y;
   const dz = targetPos.z - txDevice.position.z;
@@ -284,10 +449,32 @@ export function calculateSignalAtPoint(
   const effectiveTxPower = txDevice.txPowerDbm + txDevice.hardwareAttenuationOffsetDb;
   const rssiDbm = effectiveTxPower + txDevice.antennaGainDbi - fspl - wallLossDb + rxAntennaGainDbi;
 
+  // Calculate spatial localized interference
+  const interference = calculateInterferenceAtPoint(
+    targetPos,
+    txDevice.frequencyMHz,
+    interferenceSources,
+    walls,
+    customAttenuation
+  );
+
+  // Effective Noise Floor: thermal noise floor + sum of active interference power (in mW)
+  const thermalNoiseMw = Math.pow(10, ambientNoiseFloorDbm / 10);
+  const interferenceMw =
+    interference.totalInterferenceDbm > -140
+      ? Math.pow(10, interference.totalInterferenceDbm / 10)
+      : 0;
+  const effectiveNoiseMw = thermalNoiseMw + interferenceMw;
+  const effectiveNoiseFloorDbm = 10 * Math.log10(effectiveNoiseMw);
+
+  // SNR (Signal-to-Noise / Signal-to-Interference-plus-Noise Ratio)
+  const snrDb = rssiDbm - effectiveNoiseFloorDbm;
+
+  // Link status based on BOTH RSSI threshold and SNR threshold (physical degradation)
   let linkStatus: 'NOMINAL' | 'MARGINAL' | 'DROPPED' = 'NOMINAL';
-  if (rssiDbm < -88) {
+  if (rssiDbm < -88 || snrDb < 10) {
     linkStatus = 'DROPPED';
-  } else if (rssiDbm < -75) {
+  } else if (rssiDbm < -75 || snrDb < 20) {
     linkStatus = 'MARGINAL';
   }
 
@@ -298,5 +485,12 @@ export function calculateSignalAtPoint(
     wallLossDb: Math.round(wallLossDb * 10) / 10,
     intersectionsCount,
     linkStatus,
+    noiseFloorDbm: Math.round(effectiveNoiseFloorDbm * 10) / 10,
+    snrDb: Math.round(snrDb * 10) / 10,
+    interferenceDbm:
+      interference.totalInterferenceDbm > -140
+        ? Math.round(interference.totalInterferenceDbm * 10) / 10
+        : -120,
+    dominantInterferer: interference.dominantInterferer,
   };
 }
