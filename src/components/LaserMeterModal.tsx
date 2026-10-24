@@ -215,6 +215,7 @@ export const LaserMeterModal: React.FC<LaserMeterModalProps> = ({
                   onChange={(e) => setWallMaterial(e.target.value as any)}
                   className="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-slate-200"
                 >
+                  <option value="stone">Kamenná zeď / Lomové zdivo (-28 dB)</option>
                   <option value="reinforced_concrete">Železobeton (-25 dB)</option>
                   <option value="brick_30cm">Cihla 30cm (-12 dB)</option>
                   <option value="brick_15cm">Cihla 15cm (-7 dB)</option>

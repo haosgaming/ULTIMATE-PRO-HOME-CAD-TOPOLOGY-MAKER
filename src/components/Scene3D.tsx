@@ -258,6 +258,7 @@ export const Scene3D: React.FC<Scene3DProps> = ({
 
       let wallColor = 0x334155; // Slate default
       if (wall.material === 'reinforced_concrete') wallColor = 0x475569;
+      if (wall.material === 'stone') wallColor = 0x52525b;
       if (wall.material.includes('brick')) wallColor = 0x854d0e;
       if (wall.material === 'plasterboard') wallColor = 0x94a3b8;
       if (wall.material === 'metal_shield') wallColor = 0x0284c7;

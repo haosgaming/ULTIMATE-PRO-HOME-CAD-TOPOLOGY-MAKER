@@ -288,6 +288,7 @@ export const FloorplanEditor: React.FC<FloorplanEditorProps> = ({
 
       let strokeColor = '#475569';
       if (wall.material === 'reinforced_concrete') strokeColor = '#64748b';
+      if (wall.material === 'stone') strokeColor = '#52525b';
       if (wall.material.includes('brick')) strokeColor = '#9a3412';
       if (wall.material === 'plasterboard') strokeColor = '#94a3b8';
       if (wall.material === 'metal_shield') strokeColor = '#0284c7';
@@ -811,9 +812,16 @@ export const FloorplanEditor: React.FC<FloorplanEditorProps> = ({
                 <span className="text-slate-400">Materiál:</span>
                 <select
                   value={selectedWallMaterial}
-                  onChange={(e) => setSelectedWallMaterial(e.target.value as any)}
+                  onChange={(e) => {
+                    const mat = e.target.value as WallSegment['material'];
+                    setSelectedWallMaterial(mat);
+                    if (mat === 'stone' && wallThicknessCm < 45) {
+                      setWallThicknessCm(60);
+                    }
+                  }}
                   className="bg-slate-800 text-slate-200 rounded px-1.5 py-0.5 border border-slate-700"
                 >
+                  <option value="stone">Kamenná zeď / Lomové zdivo (-28 dB)</option>
                   <option value="reinforced_concrete">Železobeton (-25 dB)</option>
                   <option value="brick_30cm">Cihla 30cm (-12 dB)</option>
                   <option value="brick_15cm">Cihla 15cm (-7 dB)</option>
@@ -824,9 +832,12 @@ export const FloorplanEditor: React.FC<FloorplanEditorProps> = ({
                 <span className="text-slate-400 ml-1">Tl.:</span>
                 <input
                   type="number"
+                  min="5"
+                  max="150"
                   value={wallThicknessCm}
                   onChange={(e) => setWallThicknessCm(parseInt(e.target.value) || 15)}
-                  className="w-12 bg-slate-800 text-cyan-300 rounded px-1 py-0.5 border border-slate-700 text-center"
+                  className="w-14 bg-slate-800 text-cyan-300 rounded px-1 py-0.5 border border-slate-700 text-center font-bold"
+                  title="Vlastní tloušťka zdiva v cm"
                 />
                 <span className="text-slate-500">cm</span>
               </div>
@@ -1085,6 +1096,7 @@ export const FloorplanEditor: React.FC<FloorplanEditorProps> = ({
                 }
                 className="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-slate-200"
               >
+                <option value="stone">Kamenná zeď / Lomové zdivo (-28 dB)</option>
                 <option value="reinforced_concrete">Železobeton (-25 dB)</option>
                 <option value="brick_30cm">Cihla 30cm (-12 dB)</option>
                 <option value="brick_15cm">Cihla 15cm (-7 dB)</option>
@@ -1202,6 +1214,18 @@ export const FloorplanEditor: React.FC<FloorplanEditorProps> = ({
               <div className="text-slate-400 text-[11px] pb-1">
                 Rychlé vložení prefabrikované místnosti s obvodovými zdmi:
               </div>
+
+              <button
+                onClick={() => addRoomTemplate('Kamenný sklep / Lomové zdivo', 4.0, 3.2, 'stone', 60)}
+                className="w-full p-2.5 rounded-lg bg-slate-900 hover:bg-slate-850 border border-slate-800 text-left transition group"
+              >
+                <div className="font-bold text-zinc-300 group-hover:text-zinc-200">
+                  + Kamenný sklep / Masivní zdivo
+                </div>
+                <div className="text-[10px] text-slate-400">
+                  4.0m × 3.2m | Lomový kámen 60cm (-28 dB)
+                </div>
+              </button>
 
               <button
                 onClick={() => addRoomTemplate('Technická místnost (R510/FVE)', 3.5, 2.8, 'reinforced_concrete', 35)}

@@ -1,5 +1,5 @@
-import { Position3D, WallSegment, RFDevice, DevicePort } from '../utils/rf-engine.ts';
-export type { Position3D, WallSegment, RFDevice, DevicePort };
+import { Position3D, WallSegment, WallMaterial, RFDevice, DevicePort } from '../utils/rf-engine.ts';
+export type { Position3D, WallSegment, WallMaterial, RFDevice, DevicePort };
 
 export type ConduitLayer = 'ethernet' | 'power' | 'water' | 'drainage' | 'rf_bus';
 

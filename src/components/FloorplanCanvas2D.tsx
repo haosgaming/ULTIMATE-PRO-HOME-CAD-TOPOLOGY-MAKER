@@ -305,6 +305,8 @@ export const FloorplanCanvas2D: React.FC<FloorplanCanvas2DProps> = ({
           ? '#00f0ff'
           : wall.material === 'reinforced_concrete'
           ? '#475569'
+          : wall.material === 'stone'
+          ? '#52525b'
           : wall.material.includes('brick')
           ? '#854d0e'
           : '#94a3b8';
@@ -658,9 +660,16 @@ export const FloorplanCanvas2D: React.FC<FloorplanCanvas2DProps> = ({
               <span className="text-[11px] text-slate-400">Materiál:</span>
               <select
                 value={newWallMaterial}
-                onChange={(e) => setNewWallMaterial(e.target.value as any)}
+                onChange={(e) => {
+                  const mat = e.target.value as any;
+                  setNewWallMaterial(mat);
+                  if (mat === 'stone' && newWallThickness < 45) {
+                    setNewWallThickness(60);
+                  }
+                }}
                 className="text-xs bg-slate-900 text-slate-200 rounded px-1.5 py-0.5 border border-slate-700"
               >
+                <option value="stone">Kamenná zeď (-28 dB)</option>
                 <option value="reinforced_concrete">Železobeton (-25 dB)</option>
                 <option value="brick_30cm">Cihla 30cm (-12 dB)</option>
                 <option value="brick_15cm">Cihla 15cm (-7 dB)</option>

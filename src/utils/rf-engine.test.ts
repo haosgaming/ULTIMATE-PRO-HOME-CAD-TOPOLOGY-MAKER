@@ -88,3 +88,34 @@ test('Wall intersection adds material attenuation', () => {
   assert.equal(throughWallResult.intersectionsCount, 1);
   assert.ok(throughWallResult.wallLossDb > 20); // Concrete thickness 30cm => ~54dB loss
 });
+
+test('Stone wall with 60cm thickness produces high RF attenuation', () => {
+  const txSubGhz: RFDevice = {
+    id: 'gw-cc1101',
+    name: 'ESP32-S3 433MHz Gateway',
+    ip: '192.168.1.109',
+    mac: '30:ED:A0:BD:31:F4',
+    position: { x: 1, y: 1, z: 1.2 },
+    frequencyMHz: 433.92,
+    txPowerDbm: 10,
+    hardwareAttenuationOffsetDb: 0,
+    antennaGainDbi: 2,
+    protocol: 'RF433_EV1527',
+  };
+
+  const stoneWall: WallSegment = {
+    id: 'w-stone',
+    p1: { x: 3, y: 0 },
+    p2: { x: 3, y: 10 },
+    thicknessCm: 60,
+    heightM: 2.7,
+    material: 'stone',
+  };
+
+  const throughStoneResult = calculateSignalAtPoint(txSubGhz, { x: 5, y: 1, z: 1.2 }, [stoneWall]);
+
+  assert.equal(throughStoneResult.intersectionsCount, 1);
+  // Base loss at 433 MHz is 16 dB for 15cm; at 60cm thickness (factor = 4), loss is ~64 dB
+  assert.ok(throughStoneResult.wallLossDb >= 60);
+});
+

@@ -4,13 +4,23 @@ export interface Position3D {
   z: number; // meters (elevation)
 }
 
+export type WallMaterial =
+  | 'reinforced_concrete'
+  | 'stone'
+  | 'brick_30cm'
+  | 'brick_15cm'
+  | 'plasterboard'
+  | 'glass'
+  | 'metal_shield'
+  | 'wood';
+
 export interface WallSegment {
   id: string;
   p1: { x: number; y: number };
   p2: { x: number; y: number };
   thicknessCm: number;
   heightM: number;
-  material: 'reinforced_concrete' | 'brick_30cm' | 'brick_15cm' | 'plasterboard' | 'glass' | 'metal_shield' | 'wood';
+  material: WallMaterial;
 }
 
 export interface DevicePort {
@@ -54,6 +64,12 @@ export const WALL_ATTENUATION_DB: Record<WallSegment['material'], Record<string,
     '868': 22,
     '2400': 27,
     '5000': 35,
+  },
+  stone: {
+    '433': 16,
+    '868': 20,
+    '2400': 28,
+    '5000': 38,
   },
   brick_30cm: {
     '433': 8,

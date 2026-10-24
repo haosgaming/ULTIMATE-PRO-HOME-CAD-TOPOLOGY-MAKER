@@ -1254,9 +1254,16 @@ export const HouseWizardModal: React.FC<HouseWizardModalProps> = ({
                     <label className="text-slate-400 block mb-1">Materiál obvodových zdí:</label>
                     <select
                       value={wallMaterial}
-                      onChange={(e) => setWallMaterial(e.target.value as any)}
-                      className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-slate-200 focus:border-cyan-400 outline-none"
+                      onChange={(e) => {
+                        const mat = e.target.value as WallSegment['material'];
+                        setWallMaterial(mat);
+                        if (mat === 'stone' && wallThicknessCm < 45) {
+                          setWallThicknessCm(60);
+                        }
+                      }}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-slate-200 focus:border-cyan-400 outline-none font-bold"
                     >
+                      <option value="stone">Kamenná zeď / Lomové zdivo 50-80cm (-28 dB silný útlum)</option>
                       <option value="brick_30cm">Cihla Porotherm 30cm (-12 dB útlum)</option>
                       <option value="reinforced_concrete">Železobeton (-25 dB silný útlum)</option>
                       <option value="brick_15cm">Příčková cihla 15cm (-7 dB střední útlum)</option>
@@ -1266,17 +1273,33 @@ export const HouseWizardModal: React.FC<HouseWizardModalProps> = ({
                   </div>
 
                   <div>
-                    <label className="text-slate-400 block mb-1">Tloušťka obvodové zdi:</label>
+                    <label className="text-slate-400 block mb-1">Vlastní tloušťka obvodové zdi:</label>
                     <div className="relative">
                       <input
                         type="number"
-                        min="10"
-                        max="80"
+                        min="5"
+                        max="150"
                         value={wallThicknessCm}
                         onChange={(e) => setWallThicknessCm(parseInt(e.target.value) || 30)}
-                        className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-slate-200 focus:border-cyan-400 outline-none"
+                        className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-cyan-300 font-bold focus:border-cyan-400 outline-none"
                       />
                       <span className="absolute right-3 top-2.5 text-slate-500 font-bold">cm</span>
+                    </div>
+                    <div className="flex gap-1.5 mt-1.5">
+                      {[15, 30, 45, 60, 80].map((th) => (
+                        <button
+                          key={th}
+                          type="button"
+                          onClick={() => setWallThicknessCm(th)}
+                          className={`px-2 py-0.5 rounded text-[10px] font-bold border transition ${
+                            wallThicknessCm === th
+                              ? 'bg-cyan-950 border-cyan-400 text-cyan-300'
+                              : 'bg-slate-900 border-slate-800 text-slate-400 hover:bg-slate-800'
+                          }`}
+                        >
+                          {th}cm
+                        </button>
+                      ))}
                     </div>
                   </div>
                 </div>
