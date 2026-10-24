@@ -1,0 +1,6 @@
+{
+  "name": "IoT CAD & RF Topology Studio",
+  "description": "Lokální CAD a 3D simulátor IoT topologie, vedení ve zdi, RF útlumu s NAS zálohováním a AI exportem",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
